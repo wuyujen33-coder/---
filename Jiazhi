@@ -1,0 +1,118 @@
+local Screen = script.Parent.CardScreen.SurfaceGui
+local TapPart = script.Parent.TapPart
+local LightPart = script.Parent.Others:FindFirstChild("Light")
+local Sound = TapPart:FindFirstChildWhichIsA("Sound")
+
+local isProcessing = false 
+local currentDisplayId = 0 
+
+local BASE_VOLUME = 1.0
+local DISPLAY_TIME = 8 
+local ADD_AMOUNT = 15
+
+local SOUND_CONFIG = {
+	["加值"] = {Id = "rbxassetid://124604030103407", Vol = 1.0, Color = Color3.fromRGB(0, 255, 0)},
+	["錯誤"] = {Id = "rbxassetid://113177428629750", Vol = 0.5, Color = Color3.fromRGB(255, 0, 0)}
+}
+
+local function SetLight(color, isNeon)
+	if LightPart then
+		LightPart.Color = color
+		LightPart.Material = isNeon and Enum.Material.Neon or Enum.Material.SmoothPlastic
+	end
+end
+
+SetLight(Color3.fromRGB(255, 165, 0), true) 
+task.wait(1)
+SetLight(Color3.fromRGB(255, 255, 255), false) 
+
+local function Play(soundType)
+	local config = SOUND_CONFIG[soundType]
+	if Sound and config then
+		Sound.SoundId = config.Id
+		Sound.Volume = BASE_VOLUME * (config.Vol or 1.0)
+		Sound:Play()
+		SetLight(config.Color, true)
+	end
+end
+
+local function AllClose(FrameName)
+	if Screen:FindFirstChild("待機") then Screen["待機"].Visible = false end
+	if Screen:FindFirstChild("錯誤") then Screen["錯誤"].Visible = false end
+	if Screen:FindFirstChild("刷卡") then Screen["刷卡"].Visible = false end
+
+	local target = Screen:FindFirstChild(FrameName)
+	if target then 
+		target.Visible = true 
+	end
+end
+
+local function StartDisplayTimer(isSuccess)
+	currentDisplayId = currentDisplayId + 1
+	local myId = currentDisplayId
+
+	task.delay(DISPLAY_TIME, function()
+		if myId == currentDisplayId then
+			AllClose("待機")
+			SetLight(Color3.fromRGB(255, 255, 255), false)
+			if isSuccess then
+				isProcessing = false
+			end
+		end
+	end)
+end
+
+local function DisplayInfo(CHI1, CHI2, ENG1, ENG2, isSuccess)
+	AllClose("錯誤")
+	local errFrame = Screen:FindFirstChild("錯誤")
+	if not errFrame then return end
+
+	local sub = errFrame:FindFirstChild("已開班")
+	if sub then
+		sub.CHI1.Text = CHI1
+		sub.CHI2.Text = CHI2
+		sub.ENG1.Text = ENG1
+		sub.ENG2.Text = ENG2
+		sub.Visible = true
+	end
+
+	if errFrame:FindFirstChild("未開班") then errFrame["未開班"].Visible = false end
+
+	StartDisplayTimer(isSuccess)
+end
+
+TapPart.Touched:Connect(function(hit)
+	if isProcessing then return end
+
+	local Card = hit.Parent
+	local Money = Card:FindFirstChild("Money")
+	local CardType = Card:FindFirstChild("CardType")
+
+	if not (Money and CardType) then return end
+
+	isProcessing = true
+
+	if math.random() <= 0.2 then
+		Play("錯誤")
+		DisplayInfo("請再試一次", "票卡存取失敗", "Failed to access card!", "Please try again!", false)
+		task.wait(1)
+		isProcessing = false
+		return
+	end
+
+	local oldBalance = tonumber(Money.Value) or 0
+	local newBalance = oldBalance + ADD_AMOUNT
+	Money.Value = newBalance
+
+	Play("加值")
+
+	DisplayInfo(
+		"已加值 "..ADD_AMOUNT.." 元，餘額："..newBalance, 
+		"原 "..oldBalance.." 元", 
+		"Balance Inquiry & Top-up", 
+		"New Balance: "..newBalance,
+		true
+	)
+end)
+
+AllClose("待機")
